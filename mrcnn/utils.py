@@ -100,11 +100,18 @@ def compute_overlaps(boxes1, boxes2):
 def compute_overlaps_masks(masks1, masks2):
     '''Computes IoU overlaps between two sets of masks.
     masks1, masks2: [Height, Width, instances]
+    masks1 = predicted mask
+    masks2 = ground truth mask
     '''
 
     # If either set of masks is empty return empty result
-    if masks1.shape[0] == 0 or masks2.shape[0] == 0:
+    if masks1.shape[-1] == 0 or masks2.shape[-1] == 0:
+        # print("Predicted mask shape:{0}/t GT mask shape:{1}".format(masks1.shape, masks2.shape))
         return np.zeros((masks1.shape[0], masks2.shape[-1]))
+
+    # If either set of masks is empty return empty result
+    # if masks1.shape[0] == 0 or masks2.shape[0] == 0:
+        # return np.zeros((masks1.shape[0], masks2.shape[-1]))
     # flatten masks and compute their areas
     masks1 = np.reshape(masks1 > .5, (-1, masks1.shape[-1])).astype(np.float32)
     masks2 = np.reshape(masks2 > .5, (-1, masks2.shape[-1])).astype(np.float32)

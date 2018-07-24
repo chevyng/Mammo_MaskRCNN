@@ -44,6 +44,7 @@ import datetime
 import numpy as np
 import skimage.io
 from imgaug import augmenters as iaa
+import pandas as pd
 
 # Root directory of the project
 ROOT_DIR = os.path.abspath("../../")
@@ -61,10 +62,6 @@ COCO_WEIGHTS_PATH = os.path.join(ROOT_DIR, "mask_rcnn_coco.h5")
 # Directory to save logs and model checkpoints, if not provided
 # through the command line argument --logs
 DEFAULT_LOGS_DIR = os.path.join(ROOT_DIR, "logs")
-
-# Results directory
-# Save submission files here
-RESULTS_DIR = os.path.join(ROOT_DIR, "results/mammo/")
 
 # The dataset doesn't have a standard train/val split, so I picked
 # a variety of images to surve as a validation set.
@@ -157,37 +154,6 @@ VAL_IMAGE_IDS = ['P_01516_RIGHT_MLO', 'P_00626_LEFT_CC', 'P_00265_RIGHT_CC', 'P_
          'P_00106_RIGHT_MLO', 'P_02226_LEFT_CC', 'P_00864_LEFT_CC', 'P_00098_LEFT_MLO', 'P_01053_LEFT_MLO', 'P_00897_LEFT_MLO',
          'P_02218_LEFT_MLO', 'P_01839_LEFT_MLO', 'P_00924_LEFT_CC'
          ]
-# VAL_IMAGE_IDS = [
-#     "P_00016_LEFT_MLO",
-#     "P_00017_LEFT_CC",
-#     "P_00147_RIGHT_CC",
-#     "P_00156_RIGHT_MLO",
-#     "P_00173_LEFT_CC",
-#     "P_00200_RIGHT_CC",
-#     "P_00209_LEFT_MLO",
-#     "P_00230_RIGHT_MLO",
-#     "P_00544_LEFT_CC",
-#     "P_00601_LEFT_MLO",
-#     "P_00738_RIGHT_CC",
-#     "P_00837_RIGHT_MLO",
-#     "P_00198_LEFT_CC",
-#     "P_00296_LEFT_CC",
-#     "P_00296_LEFT_MLO",
-#     "P_00358_RIGHT_MLO",
-#     "P_00359_LEFT_MLO",
-#     "P_00387_RIGHT_MLO",
-#     "P_00470_RIGHT_CC",
-#     "P_00482_LEFT_MLO",
-#     "P_00516_LEFT_MLO",
-#     "P_00524_LEFT_MLO",
-#     "P_00524_LEFT_CC",
-#     "P_00612_RIGHT_MLO",
-#     'P_00615_RIGHT_CC',
-#     "P_00623_LEFT_CC",
-#     "P_00677_RIGHT_MLO",
-#     "P_00699_RIGHT_CC",
-#     "P_00718_RIGHT_MLO",
-# ]
 
 
 ############################################################
@@ -278,7 +244,7 @@ class MammoInferenceConfig(MammoConfig):
     IMAGE_RESIZE_MODE = "pad64"
     # Non-max suppression threshold to filter RPN proposals.
     # You can increase this during training to generate more propsals.
-    RPN_NMS_THRESHOLD = 0.5
+    RPN_NMS_THRESHOLD = 0.7
 
 
 ############################################################
@@ -286,6 +252,10 @@ class MammoInferenceConfig(MammoConfig):
 ############################################################
 
 class MammoDataset(utils.Dataset):
+
+    def load_metadata(self, metadata_file):
+        df = pd.read_csv(metadata_file)
+
 
     def load_mammo(self, dataset_dir, subset):
         """Load a subset of the nuclei dataset.
@@ -296,29 +266,37 @@ class MammoDataset(utils.Dataset):
                 * train: stage1_train excluding validation images
                 * val: validation images from VAL_IMAGE_IDS
         """
-        # Add classes. We have one class.
-        # Naming the dataset mass, and the class mass
-        self.add_class("mass", 1, "mass")
+        # # Add classes. We have one class.
+        # # Naming the dataset mass, and the class mass
+        # self.add_class("mass", 1, "mass")
 
         # Which subset?
         # "val": use hard-coded list above
         # "train": use data from stage1_train minus the hard-coded list above
         # else: use the data from the specified sub-directory
-        assert subset in ["train", "val", "stage1_train", "stage1_test", "stage2_test"]
-        subset_dir = "stage1_train" if subset in ["train", "val"] else subset
+        assert subset in ["train", "val", "stage1_train", "mass_train", "mass_test", "calc_test", "stage2_test"]
+        # subset_dir = "stage1_train" if subset in ["train", "val"] else subset
+        subset_dir = "mass_train" if subset in ["mass_train", "val"] else subset
+        # subset_dir = subset
         dataset_dir = os.path.join(dataset_dir, subset_dir)
         print(subset)
+        image_ids = next(os.walk(dataset_dir))[1]
+        val_size = round(len(image_ids)* 0.20)
+        np.random.seed(0)
+        np.random.shuffle(image_ids)
+        VAL_IMAGE_IDS = image_ids[:val_size]
+
         if subset == "val":
             image_ids = VAL_IMAGE_IDS
         else:
             # Get image ids from directory names
-            image_ids = next(os.walk(dataset_dir))[1]
-            # np.random.shuffle(image_ids)
-            # image_ids = np.array(image_ids)
-            # VAL_IMAGE_IDS = image_ids[0:int(len(image_ids)*0.15)]
-            # print(VAL_IMAGE_IDS)
-            if subset == "train":
+            # image_ids = next(os.walk(dataset_dir))[1]
+            if subset == "train" or subset == "mass_train":
                 image_ids = list(set(image_ids) - set(VAL_IMAGE_IDS))
+
+        # Add classes. We have one class.
+        # Naming the dataset mass, and the class mass
+        self.add_class("mass", 1, "mass")
 
         # Add images
         for image_id in image_ids:
@@ -390,12 +368,12 @@ def train(model, dataset_dir, subset):
 
     # Image augmentation
     # http://imgaug.readthedocs.io/en/latest/source/augmenters.html
-    augmentation = iaa.SomeOf((0, 2), [
+    augmentation = iaa.SomeOf((2, 3), [
         iaa.Fliplr(0.5),
         iaa.Flipud(0.5)
-        # iaa.OneOf([iaa.Affine(rotate=90),
-        #            iaa.Affine(rotate=180),
-        #            iaa.Affine(rotate=270)]),
+        ,iaa.OneOf([iaa.Affine(rotate=90),
+                   iaa.Affine(rotate=180),
+                   iaa.Affine(rotate=270)]),
         # iaa.Multiply((0.8, 1.5)),
         # iaa.GaussianBlur(sigma=(0.0, 5.0))
     ])
@@ -417,113 +395,6 @@ def train(model, dataset_dir, subset):
                 epochs=40,
                 augmentation=augmentation,
                 layers='all')
-
-
-############################################################
-#  RLE Encoding
-############################################################
-
-def rle_encode(mask):
-    """Encodes a mask in Run Length Encoding (RLE).
-    Returns a string of space-separated values.
-    """
-    assert mask.ndim == 2, "Mask must be of shape [Height, Width]"
-    # Flatten it column wise
-    m = mask.T.flatten()
-    # Compute gradient. Equals 1 or -1 at transition points
-    g = np.diff(np.concatenate([[0], m, [0]]), n=1)
-    # 1-based indicies of transition points (where gradient != 0)
-    rle = np.where(g != 0)[0].reshape([-1, 2]) + 1
-    # Convert second index in each pair to lenth
-    rle[:, 1] = rle[:, 1] - rle[:, 0]
-    return " ".join(map(str, rle.flatten()))
-
-
-def rle_decode(rle, shape):
-    """Decodes an RLE encoded list of space separated
-    numbers and returns a binary mask."""
-    rle = list(map(int, rle.split()))
-    rle = np.array(rle, dtype=np.int32).reshape([-1, 2])
-    rle[:, 1] += rle[:, 0]
-    rle -= 1
-    mask = np.zeros([shape[0] * shape[1]], np.bool)
-    for s, e in rle:
-        assert 0 <= s < mask.shape[0]
-        assert 1 <= e <= mask.shape[0], "shape: {}  s {}  e {}".format(shape, s, e)
-        mask[s:e] = 1
-    # Reshape and transpose
-    mask = mask.reshape([shape[1], shape[0]]).T
-    return mask
-
-
-def mask_to_rle(image_id, mask, scores):
-    "Encodes instance masks to submission format."
-    assert mask.ndim == 3, "Mask must be [H, W, count]"
-    # If mask is empty, return line with image ID only
-    if mask.shape[-1] == 0:
-        return "{},".format(image_id)
-    # Remove mask overlaps
-    # Multiply each instance mask by its score order
-    # then take the maximum across the last dimension
-    order = np.argsort(scores)[::-1] + 1  # 1-based descending
-    mask = np.max(mask * np.reshape(order, [1, 1, -1]), -1)
-    # Loop over instance masks
-    lines = []
-    for o in order:
-        m = np.where(mask == o, 1, 0)
-        # Skip if empty
-        if m.sum() == 0.0:
-            continue
-        rle = rle_encode(m)
-        lines.append("{}, {}".format(image_id, rle))
-    return "\n".join(lines)
-
-
-############################################################
-#  Detection
-############################################################
-
-def detect(model, dataset_dir, subset):
-    """Run detection on images in the given directory."""
-    print("Running on {}".format(dataset_dir))
-
-    # Create directory
-    if not os.path.exists(RESULTS_DIR):
-        os.makedirs(RESULTS_DIR)
-    submit_dir = "submit_{:%Y%m%dT%H%M%S}".format(datetime.datetime.now())
-    submit_dir = os.path.join(RESULTS_DIR, submit_dir)
-    os.makedirs(submit_dir)
-
-    # Read dataset
-    dataset = MammoDataset()
-    dataset.load_mammo(dataset_dir, subset)
-    dataset.prepare()
-    # Load over images
-    submission = []
-    for image_id in dataset.image_ids:
-        # Load image and run detection
-        image = dataset.load_image(image_id)
-        # Detect objects
-        r = model.detect([image], verbose=0)[0]
-        # Encode image to RLE. Returns a string of multiple lines
-        source_id = dataset.image_info[image_id]["id"]
-        rle = mask_to_rle(source_id, r["masks"], r["scores"])
-        submission.append(rle)
-        # Save image with masks
-        visualize.display_instances(
-            image, r['rois'], r['masks'], r['class_ids'],
-            dataset.class_names, r['scores'],
-            show_bbox=False, show_mask=False,
-            title="Predictions")
-        plt.savefig("{}/{}.png".format(submit_dir, dataset.image_info[image_id]["id"]))
-
-    # Save to csv file
-    submission = "ImageId,EncodedPixels\n" + "\n".join(submission)
-    file_path = os.path.join(submit_dir, "submit.csv")
-    with open(file_path, "w") as f:
-        f.write(submission)
-    print("Saved to ", submit_dir)
-
 
 ############################################################
 #  Command Line
