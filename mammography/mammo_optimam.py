@@ -84,8 +84,8 @@ class MammoConfig(Config):
     # STEPS_PER_EPOCH = (657 - val_length) // IMAGES_PER_GPU
     # VALIDATION_STEPS = max(1, val_length // IMAGES_PER_GPU)
     # STEPS_PER_EPOCH = (657 - len(VAL_IMAGE_IDS)) // IMAGES_PER_GPU
-    STEPS_PER_EPOCH = (1229 - len(VAL_IMAGE_IDS)) // IMAGES_PER_GPU
-    VALIDATION_STEPS = max(1, len(VAL_IMAGE_IDS) // IMAGES_PER_GPU)
+    # STEPS_PER_EPOCH = (1229 - len(VAL_IMAGE_IDS)) // IMAGES_PER_GPU
+    # VALIDATION_STEPS = max(1, len(VAL_IMAGE_IDS) // IMAGES_PER_GPU)
 
     # Don't exclude based on confidence. Since we have two classes
     # then 0.5 is the minimum anyway as it picks between mass and BG
@@ -171,7 +171,7 @@ class MammoDataset(utils.Dataset):
 
 
 
-    def load_mammo(self, dataset_dir, subset):
+    def load_mammo(self, dataset_dir, subset, isOptimam=False, json_filename='mammo_normal.json'):
         """Load a subset of the nuclei dataset.
 
         dataset_dir: Root directory of the dataset
@@ -185,38 +185,105 @@ class MammoDataset(utils.Dataset):
         # "val": use hard-coded list above
         # "train": use data from stage1_train minus the hard-coded list above
         # else: use the data from the specified sub-directory
-        assert subset in ["train", "val", "stage1_train", "mass_train", "mass_test", "calc_test", "optimam_train", "optimam_val"]
+        assert subset in ["train", "val", "stage1_train", "mass_train", "mass_test", "calc_test",
+                          "optimam_train", "optimam_val"]
         # subset_dir = "stage1_train" if subset in ["train", "val"] else subset
         # subset_dir = "mass_train" if subset in ["mass_train", "val"] else subset
         subset_dir = "optimam_train" if subset in ["train", "optimam_train", "optimam_val"] else subset
         # subset_dir = subset
+        json_dir = dataset_dir
         dataset_dir = os.path.join(dataset_dir, subset_dir)
         print(subset)
-        image_ids = next(os.walk(dataset_dir))[2]
+        if not isOptimam:
+            image_ids = next(os.walk(dataset_dir))[2]
+        else:
+            json_path = os.path.join(json_dir, json_filename)
+            annotations = json.load(open(json_path))
+            images = annotations['images']
+            annos = annotations['annotations']
+            annos_ids = []
+            for i in range(len(annos)):
+                annos_ids.append(annos[i]['image_id'])
+
+            image_ids = list(set(annos_ids))
+            annos_ids_dict = {k:[] for k in image_ids}
+            images_ids_dict = {k:[] for k in image_ids}
+            idx = 0
+            for name in annos_ids:
+                annos_ids_dict[name].append(idx)
+                idx += 1
+
+            idx = 0
+            for d in images:
+                images_ids_dict[d['id']] = idx
+                idx += 1
+
+            d = {k:{} for k in image_ids}
+            for name in annos_ids:
+                anno_idxs = annos_ids_dict[name]
+                img_idx = images_ids_dict[name]
+                if len(anno_idxs) == 1:
+                    d[name]['image_id'] = name
+                    d[name]['file_name'] = images[img_idx]['file_name']
+                    d[name]['height'] = images[img_idx]['height']
+                    d[name]['width'] = images[img_idx]['width']
+                    d[name]['bbox'] = [tuple(annos[anno_idxs[0]]['bbox'])]
+                    d[name]['iscrowd'] = annos[anno_idxs[0]]['iscrowd']
+                    d[name]['category_id'] = [annos[anno_idxs[0]]['category_id']]
+                    d[name]['id'] = annos[anno_idxs[0]]['id']
+                else:
+                    d[name]['image_id'] = name
+                    d[name]['file_name'] = images[img_idx]['file_name']
+                    d[name]['height'] = images[img_idx]['height']
+                    d[name]['width'] = images[img_idx]['width']
+                    d[name]['bbox'] = []
+                    d[name]['category_id'] = []
+                    d[name]['id'] = []
+                    for idx in anno_idxs:
+                        d[name]['bbox'].append(tuple(annos[idx]['bbox']))
+                        d[name]['category_id'].append(annos[idx]['category_id'])
+                        d[name]['id'].append(annos[idx]['id'])
+
+
+
         val_size = round(len(image_ids)* 0.20)
         np.random.seed(0)
         np.random.shuffle(image_ids)
         VAL_IMAGE_IDS = image_ids[:val_size]
 
-        if subset == "val":
+        if subset == "val" or subset == "optimam_val":
             image_ids = VAL_IMAGE_IDS
         else:
-            # Get image ids from directory names
-            # image_ids = next(os.walk(dataset_dir))[1]
-            if subset == "train" or subset == "mass_train":
+            if subset == "train" or subset == "mass_train" or subset == "optimam_train":
                 image_ids = list(set(image_ids) - set(VAL_IMAGE_IDS))
 
-        # Add classes. We have one class.
-        # Naming the dataset mass, and the class mass
-        self.add_class("mass", 1, "mass")
+        # Add classes. We have three class.
+        # Naming the dataset 'optimam', and the 3 classes
+        if isOptimam:
+            self.add_class("optimam", 1, "MALIGNANT")
+            self.add_class("optimam", 2, "BENIGN")
+            self.add_class("optimam", 3, "NORMAL")
+            for image_id in image_ids:
+                image_filename = d[image_id]['file_name']
+                image_path = os.path.join(dataset_dir, image_filename)
+                self.add_image(
+                    "optimam",
+                    image_id=image_id,
+                    path=image_path,
+                    height = d[image_id]['height'],
+                    width = d[image_id]['width'],
+                    bbox = d[image_id]['bbox'],
+                    catId = d[image_id]['category_id']
+                    )
+        else:
+            self.add_class("mass", 1, "mass")
+            for image_id in image_ids:
+                self.add_image(
+                    "mass",
+                    image_id=image_id,
+                    path=os.path.join(dataset_dir, image_id))
 
         # Add images
-        for image_id in image_ids:
-            self.add_image(
-                "mass",
-                image_id=image_id,
-                path=os.path.join(dataset_dir, image_id))
-
 
         return image_ids
 
@@ -261,15 +328,15 @@ def train(model, dataset_dir, subset):
 
     # Validation dataset
     dataset_val = MammoDataset()
-    dataset_val.load_mammo(dataset_dir, "val")
+    dataset_val.load_mammo(dataset_dir, "optimam_val")
     dataset_val.prepare()
 
     # Image augmentation
     # http://imgaug.readthedocs.io/en/latest/source/augmenters.html
-    augmentation = iaa.SomeOf((2, 3), [
-        iaa.Fliplr(0.5),
-        iaa.Flipud(0.5)
-    ])
+    # augmentation = iaa.SomeOf((2, 3), [
+    #     iaa.Fliplr(0.5),
+    #     iaa.Flipud(0.5)
+    # ])
 
     # *** This training schedule is an example. Update to your needs ***
 
@@ -279,14 +346,14 @@ def train(model, dataset_dir, subset):
     model.train(dataset_train, dataset_val,
                 learning_rate=config.LEARNING_RATE,
                 epochs=20,
-                augmentation=augmentation,
+                augmentation=None,
                 layers='heads')
 
     print("Train all layers")
     model.train(dataset_train, dataset_val,
                 learning_rate=config.LEARNING_RATE,
                 epochs=40,
-                augmentation=augmentation,
+                augmentation=None,
                 layers='all')
 
 ############################################################
