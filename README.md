@@ -6,8 +6,8 @@ This project uses the [Matterport's Mask R-CNN](https://github.com/matterport/Ma
 image domain and we are interested to know if it transposes to the domain of mammograms.
 
 ## Supervisors
-* Stephen Morrell, UCL
-* Dr. Juan Eugenio, UCL
+* Stephen Morrell
+* Dr. Juan Eugenio
 
 ## Dependencies
 * Python 3
@@ -16,3 +16,20 @@ image domain and we are interested to know if it transposes to the domain of mam
 
 ## Data set
 * [CBIS-DDSM](https://wiki.cancerimagingarchive.net/display/Public/CBIS-DDSM)
+
+## Folder structure
+```
+|--mrcnn
+|--faster_rcnn
+|--mammography
+|--dataset (excluded in repo)
+    |--mammo
+        |--mass_train
+        |--mass_test
+            | P_XXXXX_LEFT_CC
+                |--full_image
+                    |--P_XXXXX_LEFT_CC.png
+                |--masks
+                    |--P_XXXXX_LEFT_CC_1.png
+            | ...
+```
