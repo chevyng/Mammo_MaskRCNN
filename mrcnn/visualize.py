@@ -80,81 +80,6 @@ def apply_mask(image, mask, color, alpha=0.5):
                                   image[:, :, c])
     return image
 
-def display_optimam_instances(image, boxes, class_ids, class_names,
-                      scores=None, title="",
-                      figsize=(16, 16), ax=None,
-                      show_bbox=True, colors=None,
-                      captions=None):
-    """
-    boxes: [num_instance, (y1, x1, y2, x2, class_id)] in image coordinates.
-    class_ids: [num_instances]
-    class_names: list of class names of the dataset
-    scores: (optional) confidence scores for each box
-    title: (optional) Figure title
-    show_bbox: To show masks and bounding boxes or not
-    figsize: (optional) the size of the image
-    colors: (optional) An array or colors to use with each object
-    captions: (optional) A list of strings to use as captions for each object
-    """
-    # Number of instances
-    boxes = np.array(boxes)
-    N = boxes.shape[0]
-    if not N:
-        print("\n*** No instances to display *** \n")
-    else:
-        assert boxes.shape[0] == class_ids.shape[0]
-
-    # If no axis is passed, create one and automatically call show()
-    auto_show = False
-    if not ax:
-        _, ax = plt.subplots(1, figsize=figsize)
-        auto_show = True
-
-    # Generate random colors
-    colors = colors or random_colors(N)
-
-    # Show area outside image boundaries.
-    height, width = image.shape[:2]
-    ax.set_ylim(height + 10, -10)
-    ax.set_xlim(-10, width + 10)
-    ax.axis('off')
-    ax.set_title(title)
-
-    # masked_image = image.astype(np.uint32).copy()
-    for i in range(N):
-        color = colors[i]
-
-        # Bounding box
-        if not np.any(boxes[i]):
-            # Skip this instance. Has no bbox. Likely lost in image cropping.
-            continue
-        # y1, x1, y2, x2 = boxes[i]
-        x1, y1, x2, y2 = boxes[i]
-        # y1 = int(y1)
-        # x1 = int(x1)
-        # y2 = int(y2)
-        # x2 = int(x2)
-        if show_bbox:
-            p = patches.Rectangle((x1, y1), x2 - x1, y2 - y1, linewidth=2,
-                                alpha=0.7, edgecolor=color, facecolor='none')
-            ax.add_patch(p)
-
-        # Label
-        if not captions:
-            class_id = class_ids[i]
-            score = scores[i] if scores is not None else None
-            label = class_names[class_id]
-            # x = random.randint(x1, (x1 + x2) // 2)
-            caption = "{} {:.3f}".format(label, score) if score else label
-        else:
-            caption = captions[i]
-        ax.text(x1, y1 + 8, caption,
-                color='w', size=11, backgroundcolor="none")
-
-    ax.imshow(image)
-    if auto_show:
-        plt.show()
-
 
 def display_instances(image, boxes, masks, class_ids, class_names,
                       scores=None, title="",
@@ -265,11 +190,16 @@ def display_differences(image,
     boxes = np.concatenate([gt_box, pred_box])
     masks = np.concatenate([gt_mask, pred_mask], axis=-1)
     # Captions per instance show score/IoU
-    captions = ["" for m in gt_match] + ["{:.2f} / {:.2f}".format(
+
+    captions = ["{}".format(class_names[j]) for j in gt_class_id] + ["{} {:.2f} / {:.2f}".format(
+        class_names[pred_class_id[i]],
         pred_score[i],
         (overlaps[i, int(pred_match[i])]
             if pred_match[i] > -1 else overlaps[i].max()))
             for i in range(len(pred_match))]
+
+
+    print(captions)
     # Set title if not provided
     title = title or "Ground Truth and Detections\n GT=green, pred=red, captions: score/IoU"
     # Display

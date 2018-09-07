@@ -750,7 +750,6 @@ def compute_ap(gt_boxes, gt_class_ids, gt_masks,
     # Compute precision and recall at each prediction box step
     precisions = np.cumsum(pred_match > -1) / (np.arange(len(pred_match)) + 1)
     recalls = np.cumsum(pred_match > -1).astype(np.float32) / len(gt_match)
-
     # Pad with start and end values to simplify the math
     precisions = np.concatenate([[0], precisions, [0]])
     recalls = np.concatenate([[0], recalls, [1]])
@@ -786,11 +785,11 @@ def compute_ap_range(gt_box, gt_class_id, gt_mask,
         if verbose:
             print("AP @{:.2f}:\t {:.3f}".format(iou_threshold, ap))
         AP.append(ap)
-    AP = np.array(AP).mean()
+    mAP = np.array(AP).mean()
     if verbose:
         print("AP @{:.2f}-{:.2f}:\t {:.3f}".format(
-            iou_thresholds[0], iou_thresholds[-1], AP))
-    return AP
+            iou_thresholds[0], iou_thresholds[-1], mAP))
+    return mAP, AP
 
 
 def compute_recall(pred_boxes, gt_boxes, iou):

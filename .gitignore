@@ -9,6 +9,8 @@ images/
 assets/
 mammography/checkpoints/
 samples/
+*.csv
+*.xlsx
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -60,3 +62,4 @@ pip-delete-this-directory.txt
 .venv
 venv/
 ENV/
+*.AMD-DESKTOP-234
