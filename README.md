@@ -6,8 +6,8 @@ This project uses the [Matterport's Mask R-CNN](https://github.com/matterport/Ma
 image domain and we are interested to know if it transposes to the domain of mammograms.
 
 ## Supervisors
-* Stephen Morrell
-* Dr. Juan Eugenio
+* Stephen Morrell, UCL
+* Dr. Juan Eugenio, UCL
 
 ## Dependencies
 * Python 3
